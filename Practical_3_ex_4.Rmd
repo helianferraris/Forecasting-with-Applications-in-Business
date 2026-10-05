@@ -1,0 +1,152 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+**Exercise 4. Synthetic Multiplicative Time Series**
+
+```{r}
+
+# Reproducibility
+set.seed(123)
+
+# Number of months
+n <- 120   # 10 years
+
+# Time index
+t <- 1:n
+
+# Increasing trend
+Tt <- 100 * (1 + 0.01 * t)
+
+# Multiplicative seasonal pattern
+seasonal_pattern <- c(
+  0.80, 0.85, 0.95, 1.00, 1.10, 1.20,
+  1.30, 1.25, 1.10, 1.00, 0.90, 0.85
+)
+
+St <- rep(seasonal_pattern, length.out = n)
+
+# Multiplicative noise
+# Log-normal noise has mean approximately 1 after adjustment
+epsilon <- rlnorm(n, meanlog = -0.5 * 0.10^2, sdlog = 0.10)
+
+# Generate the multiplicative series
+Yt <- Tt * St * epsilon
+
+# Convert Y to a monthly time series
+Y <- ts(Yt, start = c(2015, 1), frequency = 12)
+
+plot(Y, main = 'Monthly Multiplicative Time Series') 
+
+
+```
+
+Perform a manual decomposition (LOESS for trend, average detrended by month for seasonality) and STL decomposition.
+
+Estimating the trend:
+
+```{r}
+
+# Transform using logarithm
+Y_log <- log(Y)
+
+loess_fit <- loess(Y_log ~ t) 
+
+T_hat <- predict(loess_fit)
+T_hat
+
+plot(t, Y_log, type = "l",
+     main = "Observed Series and LOESS Trend",
+     xlab = "Time",
+     ylab = "Y_log")
+
+lines(t, T_hat, lwd = 2)
+
+ggplot() +
+  aes(x = t, y = T_hat) +
+  geom_line() +
+  labs(
+    title = "Estimated trend",
+    x = "Time",
+    y = 'Trend'
+  )
+
+```
+
+Detrend the data:
+
+```{r}
+Detrend = Y_log - T_hat
+Detrend
+
+```
+
+Average the detrended values by month
+
+```{r}
+month <- cycle(Y)
+
+seasonal_means <- tapply(Detrend, month, mean)
+seasonal_means
+sum(seasonal_means) # ≠ 0, so we must center it
+
+
+
+```
+
+Center the seasonal component:
+
+```{r}
+
+
+s_hat_month <- seasonal_means - mean(seasonal_means)
+s_hat_month
+sum(s_hat_month) # = 0
+
+S_hat <- s_hat_month[month]
+S_hat
+
+ggplot() +
+  aes(x = t, y = S_hat) +
+  geom_line() +
+  labs(
+    title = "Estimated seasonal component",
+    x = "Time",
+    y = 'Seasonality'
+  )
+
+
+```
+
+Estimate the noise/remainder term: 
+
+```{r}
+
+epsilon_hat = Y_log - T_hat - S_hat
+epsilon_hat
+
+ggplot() +
+  aes(x = t, y = epsilon_hat) +
+  geom_line() +
+  labs(
+    title = "Estimated remainder component",
+    x = "Time",
+    y = 'Remainder'
+  )
+
+```
+
+Perform STL decomposition (log-scale):
+
+```{r}
+
+class(Y_log) # ts so no need to convert 
+
+# We already applied the log on Y so it's okay
+
+Y_stl <- stl(Y_log, s.window = "periodic")
+plot(Y_stl, main = 'STL Decomposition')
+
+```
+

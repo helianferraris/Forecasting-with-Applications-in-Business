@@ -1,0 +1,143 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+**Exercise 2. Synthetic Additive Time Series**
+
+Generate a quarterly additive series with linear trend, seasonal component, and Gaussian noise:
+
+```{r}
+library(fpp3)
+
+n <- 50
+sigma <- 2
+epsilon <- rnorm(n, mean = 0, sd = sigma)
+
+# Linear trend
+T <- 0.05 * (1:n)
+
+# Quarterly seasonal component
+S <- rep(c(-2, 1, 3, -2), length.out = n)
+  
+
+# Additive time series
+Y <- T + S + epsilon
+
+```
+
+Plot the generated series:
+
+```{r}
+
+plot(Y, type = "l",
+     main = "Quarterly Additive Time Series",
+     xlab = "Time",
+     ylab = "Y")
+
+```
+Perform a manual decomposition using LOESS for the trend and average detrended values per
+quarter for seasonality.
+
+Estimating the trend:
+
+```{r}
+
+time <- 1:n
+
+quarter <- rep(1:4, length.out = n)
+
+loess_fit <- loess(Y ~ time) 
+
+T_hat <- predict(loess_fit)
+T_hat
+
+plot(time, Y, type = "l",
+     main = "Observed Series and LOESS Trend",
+     xlab = "Time",
+     ylab = "Y")
+
+lines(time, T_hat, lwd = 2)
+
+ggplot() +
+  aes(x = time, y = T_hat) +
+  geom_line() +
+  labs(
+    title = "Estimated trend",
+    x = "Time",
+    y = 'Trend'
+  )
+
+
+```
+
+Detrend the data:
+
+```{r}
+Detrend = Y - T_hat
+Detrend
+```
+
+Average the detrended values by quarter:
+
+```{r}
+
+seasonal_means <- tapply(Detrend, quarter, mean)
+seasonal_means
+sum(seasonal_means) # ≠ 0, so we must center it
+
+```
+
+Center the seasonal component:
+
+```{r}
+
+s_hat_quarter <- seasonal_means - mean(seasonal_means)
+s_hat_quarter
+sum(s_hat_quarter) # = 0
+
+S_hat <- s_hat_quarter[quarter]
+S_hat
+
+ggplot() +
+  aes(x = time, y = S_hat) +
+  geom_line() +
+  labs(
+    title = "Estimated seasonal component",
+    x = "Time",
+    y = 'Seasonality'
+  )
+
+
+
+```
+
+Estimate the noise/remainder term:
+
+```{r}
+
+epsilon_hat = Y - T_hat - S_hat
+epsilon_hat
+
+ggplot() +
+  aes(x = time, y = epsilon_hat) +
+  geom_line() +
+  labs(
+    title = "Estimated remainder component",
+    x = "Time",
+    y = 'Remainder'
+  )
+
+
+```
+
+Perform STL decomposition:
+
+```{r}
+
+Y_ts <- ts(Y, frequency = 4)
+Y_stl <- stl(Y_ts, s.window = "periodic")
+plot(Y_stl)
+
+```
+

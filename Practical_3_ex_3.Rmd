@@ -1,0 +1,130 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+**Exercise 3. Multiplicative Decomposition: AirPassengers**
+
+
+```{r}
+
+library(datasets)
+library(fpp3)
+
+plot(AirPassengers)
+
+```
+
+```{r}
+
+AirPassengers <- log(AirPassengers)
+
+```
+
+Perform a manual decomposition (LOESS for trend, average detrended by month for seasonality) and STL decomposition.
+
+Estimating the trend:
+
+```{r}
+
+time <- 1:length(AirPassengers)
+
+month <- rep(1:12, length.out = length(AirPassengers))
+
+loess_fit <- loess(AirPassengers ~ time) 
+
+T_hat <- predict(loess_fit)
+T_hat
+
+plot(time, AirPassengers, type = "l",
+     main = "Observed Series and LOESS Trend",
+     xlab = "Time",
+     ylab = "AirPassengers")
+
+lines(time, T_hat, lwd = 2)
+
+ggplot() +
+  aes(x = time, y = T_hat) +
+  geom_line() +
+  labs(
+    title = "Estimated trend",
+    x = "Time",
+    y = 'Trend'
+  )
+
+
+```
+
+Detrend the data:
+
+```{r}
+
+Detrend = AirPassengers - T_hat
+Detrend
+
+```
+
+Average the detrended values by month
+
+```{r}
+
+seasonal_means <- tapply(Detrend, month, mean)
+seasonal_means
+sum(seasonal_means) # ≠ 0, so we must center it
+
+```
+
+Center the seasonal component:
+
+```{r}
+
+s_hat_month <- seasonal_means - mean(seasonal_means)
+s_hat_month
+sum(s_hat_month) # = 0
+
+S_hat <- s_hat_month[month]
+S_hat
+
+ggplot() +
+  aes(x = time, y = S_hat) +
+  geom_line() +
+  labs(
+    title = "Estimated seasonal component",
+    x = "Time",
+    y = 'Seasonality'
+  )
+
+```
+
+Estimate the remainder term:
+
+```{r}
+
+remainder = Y - T_hat - S_hat
+remainder
+
+ggplot() +
+  aes(x = time, y = remainder) +
+  geom_line() +
+  labs(
+    title = "Estimated remainder component",
+    x = "Time",
+    y = 'Remainder'
+  )
+
+```
+
+Perform STL decomposition (log-scale):
+
+```{r}
+
+class(AirPassengers) # ts so no need to convert 
+
+# We already applied the log on AirPassengers so it's okay
+
+AirPassengers_stl <- stl(AirPassengers, s.window = "periodic")
+plot(AirPassengers_stl)
+
+
+```
+

@@ -1,0 +1,206 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+**Exercise 1. Additive Decomposition: Beer Production Data**
+
+
+```{r}
+#rm(list = ls())
+
+library(fpp3)
+library(dbplyr)
+
+aus_production
+
+class(aus_production$Quarter) # "vctrs_vctr"
+class(aus_production$Beer) # numeric
+              
+
+aus_production |>
+  filter_index("1992 Q1" ~ "2000 Q4") |>
+  select(Quarter, Beer)
+
+```
+
+```{r}
+
+# Extract quarterly beer production from 1992 Q1 to 2000 : (way 1)
+beer_prod <- aus_production %>%
+  filter(Quarter >= yearquarter("1992 Q1"),
+         Quarter <= yearquarter("2000 Q4")) |>
+  select(Quarter, Beer)
+
+```
+
+1. Get the data
+
+```{r}
+#equivalently 
+
+# Extract quarterly beer production from 1992 Q1 to 2000 : (way 2)
+
+beer_prod <- aus_production |>
+  filter_index("1992 Q1" ~ "2000 Q4") |>
+  autoplot(Beer) +
+  labs(
+    title = "Australian beer production",
+    x = "Quarter",
+    y = "Beer production"
+  )
+
+beer_prod
+
+# Careful after autoplot(Beer), beer_prod is now an object of class ggplot not a tsibble anymore
+```
+
+2. Estimate the trend using LOESS
+
+```{r}
+beer_prod <- aus_production |>
+  filter_index("1992 Q1" ~ "2000 Q4") |>
+  select(Quarter, Beer)
+
+
+# We need to recreate beer_prod from aus_production to get an object of class tsibble
+
+beer <- beer_prod |>
+  mutate(
+    time = row_number()
+  )
+
+loess_fit <- loess(Beer ~ time, data = beer) # ~ option + N + espace
+
+beer <- beer |>
+  mutate(
+    Trend = predict(loess_fit)
+  )
+
+beer
+```
+
+3. Detrend the data
+
+```{r}
+beer <- beer |>
+  mutate(
+    Detrended = Beer - Trend,
+    Quarter_num = quarter(Quarter)
+  )
+
+beer
+
+```
+
+4. Calculate seasonal effects
+
+```{r}
+seasonal <- beer |>
+   as_tibble() |>
+   group_by(Quarter_num) |>
+   summarise(
+    Seasonal = mean(Detrended, na.rm = TRUE),
+    .groups ='drop'
+  )
+
+seasonal
+beer
+
+
+```
+
+5. Add the seasonal component back to the data
+
+```{r}
+
+beer <- beer |>
+  mutate(
+    Quarter_num = quarter(Quarter)
+  ) |>
+  left_join(seasonal, by = "Quarter_num")
+
+beer
+```
+
+6. Calculate the remainder
+
+```{r}
+
+beer <- beer |>
+  mutate(
+    Remainder = Beer - Trend - Seasonal
+  )
+beer
+```
+
+7. Plot the components
+
+```{r}
+
+beer |>
+  autoplot(Beer) +
+  geom_line(aes(y = Trend), linewidth = 1)
+
+```
+
+Plot the individual components separately:
+
+```{r}
+
+beer |>
+  ggplot(aes(x = Quarter, y = Beer)) +
+  geom_line() +
+  geom_line(aes(y = Trend), linewidth = 1, col = 'red') 
+  
+
+```
+
+For the seasonal component:
+
+```{r}
+beer |>
+  ggplot(aes(x = Quarter, y = Seasonal)) +
+  geom_line() +
+  labs(
+    title = 'Estimated seasonal component',
+    x = 'Quarter',
+    y= 'Seasonality'
+  )
+  
+```
+
+And the remainder:
+
+```{r}
+
+beer |>
+  ggplot(aes(x = Quarter, y = Remainder)) +
+  geom_line() +
+  labs(
+    title = 'Estimated remainder component',
+    x = 'Quarter',
+    y= 'Remainder'
+  )
+
+```
+
+Perform an STL decomposition using STL()
+
+```{r}
+
+beer_stl <- beer |>
+  model(
+    STL(Beer ~ trend(window = 7) + 
+          season(window = 'periodic'))
+  )
+```
+
+Plotting STL decomposition
+
+```{r}
+
+components(beer_stl) |>
+  autoplot()
+
+```
