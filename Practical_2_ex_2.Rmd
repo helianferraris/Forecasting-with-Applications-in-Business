@@ -1,0 +1,66 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+# clean workspace
+# rm(list = ls())
+
+library(fpp3)
+library(energy) # implements the Székely/Rizzo/Bakirov distance correlation directly
+set.seed(123)
+
+# Simulate a white noise process Yt i.i.d.∼N(0,5^2) of length n= 500:
+
+y <- rnorm(n = 500, mean = 0, sd =5) #careful var =sd^2
+
+# Plot the generated time series:
+
+plot.ts(y) #ts for time series
+
+# Compute the empirical autocovariance γ_hat(h) and autocorrelation ρ_hat(h) for lags h = 0,1,...n−1 manually and using R function acf():
+
+# Autocovariance γ_hat(h):
+
+h = 3
+
+gamma_hat <- function(y,h) {
+  n    <- length(y)
+  ybar <- mean(y)
+  sum((y[1:(n-h)] - ybar) * (y[(1+h):n] - ybar)) / n
+}
+
+gam <- sapply(0:(n-1), function(h) gamma_hat(y, h)) # here function(h) is an anonymous function, function(h) gamma_hat(y, h) says: "given a value h, return gamma_hat(y, h)."
+head(gam) 
+
+# Autocorrelation ρ_hat(h):
+
+rho <- gam / gam[1] 
+head(rho)
+
+
+rho_acf <- acf(y, lag.max = n-1)$acf[, 1, 1]
+
+all.equal(rho, rho_acf) # TRUE if they match
+
+# Distance autocorrelation (therom 7 formula):
+
+h <- 3
+dcor(y[1:(n-h)], y[(1+h):n]) # distance autocorrelation for lag h=3
+
+# dcor() returns R(X,Y) directly (not squared), between 0 and 1.
+
+dcor_hat <- function(y, h) {
+  n <- length(y)
+  if (h == 0) return(1)              # R(Y_t, Y_t) = 1 by definition
+  dcor(y[1:(n-h)], y[(1+h):n])
+}
+
+dcor_vals <- sapply(0:20, function(h) dcor_hat(y, h))
+head(dcor_vals)
+
+```
+
+For dcor_vals we stop at 20, not n-1. Unlike gamma_hat, dcor() is computationally expensive (its cost grows with the square of the sample size for each pair), so looping it up to lag 499 would be very slow and the far lags are unreliable anyway, as you saw with the autocovariance. Going up to 20–30 lags is enough to compare with the ACF plot.

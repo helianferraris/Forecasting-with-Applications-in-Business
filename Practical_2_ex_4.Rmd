@@ -1,0 +1,71 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+
+
+#rm(list = ls())
+library(energy)
+set.seed(12)
+
+# Exercise 4. Autocovariance and autocorrelation of an MA(1) process:
+
+n <- 500
+sigma <- 2
+epsilone <- rnorm(n+1, mean = 0, sd = sigma) # we generated 500 random errors
+
+Y <- numeric(500)
+Y[1] <- epsilone[1]
+
+for (t in 1:n) {
+  Y[t] <- 0.5* epsilone[t] + epsilone[t+1]
+  
+}
+
+Y
+
+Y_bar <- mean(Y)
+
+# Autocovariance γ_hat(h):
+
+
+gamma_hat <- function(Y,h) {
+  sum((Y[1:(n-h)] - Y_bar) * (Y[(1+h):n] - Y_bar)) / n
+}
+
+gam <- sapply(0:(n-1), function(h) gamma_hat(Y, h))
+
+head(gam)
+
+# Autocorrelation ρ_(h) for lags h = 0,1,...n−1:
+
+rho <- gam / gam[1] 
+head(rho)
+
+rho_acf <- acf(Y, lag.max = n-1)$acf[, 1, 1]
+
+all.equal(rho, rho_acf)
+
+# Distance autocorrelation (therom 7 formula):
+
+h <- 3
+dcor(Y[1:(n-h)], Y[(1+h):n]) # distance autocorrelation for lag h=3
+
+# dcor() returns R(X,Y) directly (not squared), between 0 and 1.
+
+dcor_hat <- function(Y, h) {
+  if (h == 0) return(1)              # R(Y_t, Y_t) = 1 by definition
+  dcor(Y[1:(n-h)], Y[(1+h):n])
+}
+
+dcor_vals <- sapply(0:20, function(h) dcor_hat(Y, h))
+head(dcor_vals)
+
+
+
+
+```
+
