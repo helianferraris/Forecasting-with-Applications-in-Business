@@ -1,0 +1,50 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+library(tsibble)
+library(tsibbledata)
+library(dplyr)
+
+PBS
+
+head(PBS) # function to see only the first rows, by default head() shows the first 6 rows
+# had(PBS, 3) --> show only the three first rows
+
+
+index(PBS) #this tells you the time variable --> asks : Which column represents time?
+
+key_vars(PBS) #This tells you the grouping variables --> asks : "Which variables define the different groups in my time series?"
+#the _vars is optional it allows R to show the keys in horizontal
+
+# Find the first and last time points in the dataset:
+
+min(PBS$Month) #first point --> the $ means "Give me the column/variable called Month inside PBS."
+
+max(PBS$Month) #last point
+
+# or both in once
+range(PBS %>% pull(Month)) 
+
+# Count the number of observations:
+
+PBS %>% # %>% is called the pipe operator - it means "Take the thing on the left and pass it into the operation on the right."
+  count(ATC1) #number of observations per ATC1 - "Take PBS, then count the observations by ATC1."
+
+```
+
+
+"fpp3" %in% rownames(installed.packages()) --> way to check if a package is already installed (here fpp3)
+
+library() loads the package in the session
+
+%>% ("pip") : this operator means "use this value for the following action"
+
+example:
+abs() %>%
+log() %>%
+mean()
+--> here we will take the absolute value of the input, then we'll apply a log on this absolute value and finally computes its mean.

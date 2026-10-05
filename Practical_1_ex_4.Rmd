@@ -1,0 +1,85 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+
+
+library(fpp3)
+
+
+autoplot(gafa_stock, Close) #gafa_stock contains several variables, such as Open, High, Low, Close, and Volume. Here, we are explicitly telling R "Plot the closing-price series"
+
+# we can do  gafa_stock %>%
+#               filter(Symbol == "GOOG")  %>%
+#               autoplot(Close)                as well
+
+
+  
+autoplot(vic_elec, Demand)
+
+autoplot(pelt, Lynx) #ici on choisit de regarder l'évolution du prix des peaux de linx
+
+PBS |>
+  filter(
+    Concession == "Concessional",
+    Type == "Co-payments",
+    ATC1 == "A",
+    ATC2 == "A01"
+  ) |>
+  autoplot(Cost)
+ 
+# interval ≠ index :
+
+interval(gafa_stock)
+interval(PBS)
+interval(vic_elec)
+interval(pelt)
+
+#2. Days corresponding to the peak closing price:
+
+key(gafa_stock)
+
+#?gafa_stock--> the ? gives us the description of the object
+gafa_stock %>%
+  count(Symbol) # --> there are four companies
+
+distinct(gafa_stock, Symbol) # to check the stocks name
+
+#find the maximum closing price for each stock:
+gafa_stock %>%
+  group_by(Symbol) %>% #separates the data into the four stocks
+  filter(Close == max(Close)) %>% #keeps only the observation where the closing price is the maximum for each stock
+  select(Symbol, Date, Close) #shows only the stock, date, and closing price
+
+
+
+```
+
+What is autoplot()?
+
+autoplot() basically means:
+
+"Look at this object and automatically choose an appropriate way to plot it."
+
+The important word is object.
+
+For example, if you have a time series, autoplot() can recognize that and produce a time-series plot.
+
+autoplot() is provided by the ggplot2 ecosystem, specifically through the ggplot2 package.
+
+
+glimpse() shows you:
+
+How many rows and columns you have
+The names of the columns
+The type of each column (date, dbl, chr, etc.)
+A few example values from each column
+
+For PBS why not just do autoplot(PBS, Cost) ? 
+
+PBS contains Key: Concession, Tye, ATC1, ATC2 [336] --> that means 336 different series inside the table
+If you simply ask autoplot(PBS, Cost) we ask R to draw Cost for each series
+With our code above we ask R to choose one serie among the 336.

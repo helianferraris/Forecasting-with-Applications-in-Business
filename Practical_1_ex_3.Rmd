@@ -1,0 +1,44 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+
+```{r}
+
+library(readr)
+
+library(tsibble)
+
+
+data <- read_csv("/Users/helianferraris/Desktop/Forecasting with Applications in Business/Practical 1/smartphone_sales.csv") # data is just a variable name that we choose
+
+# Convert the dataset into tsibble:
+
+smartphone_sales_ts <- as_tsibble(
+  data,
+  index = month,
+  key = model
+)
+
+index(smartphone_sales_ts)
+key(smartphone_sales_ts)
+
+print(smartphone_sales_ts)
+
+# we can also do --> smartphone_sales_ts %>%  # then we don't have to call smartphone_sales_ts in ggplot() below
+ggplot(smartphone_sales_ts, aes(
+  x = month, 
+  y = units_sold,
+  color = model  #distinguishes the two lines
+ 
+)) +
+  geom_line() 
+  
+
+```
+
+
+
+To copy the full path of a file: Select any file or folder in Finder. Then press Option + Command + C on your keyboard to instantly copy the full path to your clipboard.

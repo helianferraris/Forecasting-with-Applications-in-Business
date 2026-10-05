@@ -1,0 +1,65 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+
+```{r}
+library(fpp3)
+library(USgas)
+
+#3. US natural gas data:
+
+# ?us_total #US Annual Total Natural Gas Consumption per state
+
+us_total_tsibble <- us_total %>%
+  as_tsibble(index = year, key = state)
+
+
+#Filtering the data to get New England states:
+
+new_england <- us_total_tsibble %>%
+  filter(state %in% c(        # %in% says check if 'state' is in c(......)
+    "Maine",
+    "Vermont",
+    "New Hampshire",
+    "Massachusetts",
+    "Connecticut",
+    "Rhode Island"
+  ))
+
+new_england %>%
+  autoplot(y) +
+  labs(                                           
+    title = "Annual Natural Gas Consumption in New England",
+    x = "Year",
+    y = "Natural Gas Consumption"
+  )
+
+# Comments on your finding:
+
+# scale difference is so big for example Vermont is too small comparing to other to see anything
+# it will be better to have separate graphs, one for each state
+
+
+```
+
+labs() : labs() is used to modify the labels and title of your plot
+
+In labs() you can modify:
+
+title → graph title
+x → x-axis label
+y → y-axis label
+subtitle → subtitle
+caption → caption at the bottom
+
+example -->
+
+labs(
+  title = "Pharmaceutical Costs",
+  subtitle = "Concessional co-payments, ATC1 A, ATC2 A01",
+  x = "Month",
+  y = "Cost ($)"
+)

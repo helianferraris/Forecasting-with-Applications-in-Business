@@ -1,0 +1,63 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+
+```{r}
+
+library(fpp3)
+
+# 1) Bricks from aus_production:
+
+# ?aus_production
+
+aus_production %>%                   # %>% is the same as |>
+  autoplot(Bricks) +
+  labs(
+    title = "Quarterly production of clay bricks in millions of bricks in Australia",
+    x ="Quarter",
+    y = "Bricks"
+  )
+
+# we get a graph and "Warning: Removed 20 rows containing missing values or values outside the scale range (`geom_line()`)."
+
+# we can check for these missing values
+is.na(aus_production$Bricks)
+
+
+# 2) Lynx from pelt:
+pelt %>%
+  autoplot(Lynx) +
+  labs(
+    title = "Number of Canadian Lynx pelts traded from 1845 to 1935",
+    x ="Year",
+    y = "Number of lynx pelts"
+  )
+
+# 3) Closing prices from gafa_stock:
+
+gafa_stock %>%
+ autoplot(Close) +
+  labs(
+    title = "Closing stock prices from 2014-2018 for the GAFA",
+    subtitle = "all prices are in $USD",
+    x ="Year",
+    y = "Closing price"
+  )
+
+# 4) Demand from vic_elec:
+
+vic_elec[350:500, ] %>%
+  autoplot(Demand/1e3) +
+  labs(
+    title ="Half-hourly electricity demand for Victoria, Australia",
+    x = "Year",
+    y = "Ectricity demand in MWh"
+  
+  )
+
+```
+
+

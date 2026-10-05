@@ -1,0 +1,47 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+
+```{r}
+
+library(tidyverse)
+
+sales_data <- tibble(
+  month = rep(seq.Date(from = as.Date('2025-01-01'), by = 'month', length.out = 6), 2), 
+  product = rep(c("A", "B"), each = 6), # don't forget the each here 
+  sales = 1:12 #creates a vector (numerical) from 1 to 12
+) 
+
+# print(sales_data, n = 24) # n = 24 to print all the data
+
+sales_tsibble <- sales_data %>%
+  as_tsibble(index = month, key = product)
+
+sales_tsibble
+# in <...> we have the type of the object --> <chr> means text/character, <dbl> means numeric
+
+index(sales_tsibble)
+key(sales_tsibble)
+
+ggplot(sales_tsibble, aes(
+  x = month, 
+  y = sales,
+  color = product #distinguishes the two lines
+
+)) +
+  geom_line() #draw lines
+
+```
+
+geom_line()    → lines
+geom_point()   → dots
+geom_col()     → bars
+geom_boxplot() → boxplots
+
+ggplot()       → "Here's my canvas"
+aes()          → "Here's what my variables mean"
+geom_*()       → "Here's what I want to draw"
+
