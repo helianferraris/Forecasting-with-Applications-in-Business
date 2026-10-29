@@ -1,0 +1,184 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+**Exercise 1. Forecasting with ARMA(1,1) and Parametric Bootstrap**
+
+• Write a function simulate_arma11 that takes as inputs starting values for Y (Y0), ε (eps0), the length of the series N, and parameters phi, theta, sigma, and returns a simulated series from an ARMA(1,1) process of length N. (Note that we use T instead of N in the lecture, but in R, T is reserved for TRUE.
+
+```{r}
+
+#rm(list = ls())   
+
+simulate_arma11 <- function(Y0,eps0,N,phi,theta,sigma) {
+  
+  # Initialize vectors
+  Y <- numeric(N)      # empty container for the series
+  eps <- numeric(N)
+  
+  # Generate innovations from N(0, sigma^2)
+  eps <- rnorm(n = N, mean = 0, sd = sigma) 
+  
+  # Simulate ARMA(1,1) process
+  for (t in 1:N){
+    
+    if (t ==1) {
+      Y[t] = phi * Y0 + eps[t] + theta * eps0
+      
+    } else {
+       Y[t] <- phi * Y[t-1] + eps[t] + theta * eps[t-1]
+    }
+  }
+  
+  return(list(Y = Y, eps = eps))
+  
+}
+
+
+```
+
+• Use this function to generate a time series of length N = 200 from an ARMA(1,1) process with
+starting values Y0 = 0 and ε0 = 0 and parameters ϕ = 0.6, θ = 0.3, and innovation variance
+σ2 = 1.
+
+```{r}
+phi = 0.6
+theta = 0.3
+sigma = 1
+N = 200
+
+y <- simulate_arma11(0,0,200,0.6,0.3,1)$Y
+# or y <- arima.sim(n = N, list(ar = phi, ma = theta), sd = sigma)
+
+length(y)
+plot(y, type = 'l')
+
+
+```
+
+• Split the data into a training set (70%) and a test set (30%).
+
+```{r}
+
+p_train <- 0.7
+n_train <- floor(p_train * N)          # 70% of N
+train   <- y[1:n_train]
+test    <- y[(n_train+1):length(y)]
+h <- length(test)  # test horizon
+
+length(train)
+length(test)
+length(test) + length(train)
+
+
+
+```
+
+Fit an ARMA(1,1) model on the training data.
+
+```{r}
+
+fit <- arima(x = train, order = c(1, 0, 1), include.mean = FALSE)
+
+coef(fit)       # ar1 and ma1, compare with 0.6 and 0.3
+fit$sigma2      # variance, compare with 1
+
+```
+
+• Use the simulate_arma11 function to generate forecasts (what are the starting values in this case?):
+– Simulate B = 500 bootstrap sample paths from the fitted model for the test horizon.
+– From these bootstrap forecasts, compute the mean forecast and the 90% prediction interval (5% and 95% quantiles).
+
+```{r}
+
+
+B <- 500 # number of bootstrap paths
+boot_preds <- matrix(NA, nrow = h, ncol = B)
+
+# Generate paths
+for(b in 1:B){
+  
+  boot_preds[,b] <- simulate_arma11(Y0=train[n_train], eps0=fit$residuals[n_train], N=h, phi=fit$coef["ar1"], theta=fit$coef["ma1"], sigma=sqrt(fit$sigma2))$Y
+}
+
+pred_mean <- apply(boot_preds, 1, mean)
+alpha <- .1
+pred_q_upper <- apply(boot_preds, 1, function(x) quantile(x, probs = 1- alpha/2))
+pred_q_lower <- apply(boot_preds, 1, function(x) quantile(x, probs = alpha/2))
+
+
+
+```
+
+
+• Plot the results: training data, test data, bootstrap paths, mean forecast, and prediction interval.
+
+```{r}
+
+plot(y, type="l", col="white", main="Bootstrap Forecasts with 90% Prediction Band",
+     ylab="y", xlab="t", ylim=c(-5,5))
+lines(y[1:n_train])
+# plot bootstrap paths
+for(b in 1:B){
+  lines(n_train + 1:h, boot_preds[,b], col=rgb(0,0,0,alpha=0.05))
+}
+
+# quantile forecast band
+lines(n_train + 1:h, pred_q_upper, col="red", lwd=2, lty=2)
+lines(n_train + 1:h, pred_q_lower, col="red", lwd=2, lty=2)
+
+# shaded area for prediction band
+polygon(c(n_train + 1:h, rev(n_train + 1:h)),
+        c(pred_q_upper, rev(pred_q_lower)),
+        col=rgb(1,0,0,alpha=0.2), border=NA)
+
+# mean forecast
+lines(n_train + 1:h, pred_mean, col="blue", lwd=2) # the forecast (from train data)
+#lines(n_train + 1:h, test, col = 'white', lwd=2) # the truth (from test data)
+
+legend("topleft",
+       legend=c("Observed","Mean forecast","90% Prediction Band"),
+       col=c("black","blue","red"), lty=c(1,1,2), lwd=c(1,2,2), bty="n")
+
+```
+
+• Evaluate forecast accuracy:
+– Compute the RMSE of the mean forecast and of the upper quantile forecast.
+
+```{r}
+
+rmse_mean <- sqrt(mean((test - pred_mean)^2))
+rmse_q_upper <- sqrt(mean((test - pred_q_upper)^2))
+```
+
+– Compute the quantile score for the mean forecast and for the upper quantile forecast.
+
+```{r}
+
+# quantile score on predicted quantile
+mean_qs_upper <- mean(
+  (1-alpha/2 - 1)*(test - pred_q_upper)*(test < pred_q_upper) +
+    (1-alpha/2)*(test - pred_q_upper)*(test >= pred_q_upper)
+)
+
+# quantile score on mean
+mean_qs_mean <- mean(
+  (0.5 - 1)*(test - pred_mean)*(test < pred_mean) +
+    (0.5)*(test - pred_mean)*(test >= pred_mean)
+)
+
+```
+
+- Report the obtained scores.
+
+```{r}
+
+# print results
+cat(paste0("RMSE on mean forecast: ", round(rmse_mean,4), "\n"))
+cat(paste0("Mean Quantile Score on mean forecast: ", round(mean_qs_mean,4), "\n"))
+
+cat(paste0("RMSE on 95% quantile forecast: ", round(rmse_q_upper,4), "\n"))
+cat(paste0("Mean Quantile Score on 95% quantile forecast: ", round(mean_qs_upper,4), "\n"))
+
+```

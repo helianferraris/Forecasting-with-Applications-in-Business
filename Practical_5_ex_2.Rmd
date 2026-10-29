@@ -1,0 +1,150 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+**Exercise 2. Simulation Study: Effect of Model Misspecification**
+
+In this exercise, you will study how model misspecification impacts forecasting performance. You will conduct a Monte Carlo simulation where the data is generated from an autoregressive process of order 2 (AR(2)), while both AR(1) and AR(2) models are estimated and used to produce forecasts. The performance of these forecasts will then be evaluated and compared.
+
+• Generate a function simulate_ar2 that takes as inputs starting values for Y1 (Y1), Y0 (Y0), the length of the series N, and parameters phi1, phi2, sigma, and returns a simulated series from an AR(2) process of length N.
+
+```{r}
+#rm(list = ls())   
+
+simulate_ar2 <- function(Y1, Y0, N, phi1, phi2, sigma) {
+ 
+
+  # Initialize vectors
+  Y <- numeric(N)
+
+  # Generate innovations from N(0, sigma^2)
+  eps <- rnorm(N, mean = 0, sd = sigma)
+
+  # Simulate ARMA(1,1) process
+  for (t in 2:N) {
+    if (t == 2) {
+      Y[t] <- phi1 * Y1+ phi2 * Y0 + eps[t]
+    } else {
+      Y[t] <- phi1 * Y[t-1]+ phi2 * Y[t-2] + eps[t]
+    }
+  }
+
+  return(list(Y = Y))
+}
+
+
+
+```
+
+
+• Use this function to generate B = 500 independent replications of time series of length N = 500 from an AR(2) process with starting values Y1 = 0, Y0 = 0 and parameters ϕ1 = 0.9, ϕ2 =−0.8, and innovation standard deviation σε = 0.01.
+
+```{r}
+# Simulation
+B <- 500
+n=500
+phi <- c(.9, -.8)
+sigma_eps <- .01
+p_training = 0.7
+
+alpha <- 0.8  # 80% quantile
+
+# create mat for storing results
+mat_results <- matrix(NA, nrow = B, ncol = 6)
+```
+
+For each replication:
+
+– Split the series into a training set (70%) and a test set (30%).
+
+– Fit two competing models on the training set:
+       
+        An AR(1) model.
+        
+        An AR(2) model.
+        
+– Produce forecasts over the test horizon with both models, including the mean forecast and the 80% predicted quantile.
+
+– Compute the following forecast evaluation metrics for each model:
+
+        Root Mean Squared Error (RMSE).
+        
+        Mean Absolute Error (MAE).
+        
+        Quantile score for the 80% predicted quantile...
+
+```{r}
+library(forecast)
+
+for(b in seq(B)){
+
+  set.seed(1234+b)
+  
+  #generate y
+  y = simulate_ar2(Y1=0, Y0=0, N=500, phi1=0.9, phi2=-0.8, sigma=0.01)$Y
+  
+  # split in training and test and proportion given
+  y_train = y[1:floor(n*p_training)]
+  y_test = y[(floor(n*p_training)+1):n]
+  
+  # fit AR1 model
+  fit_ar1 <- arima(y_train, order = c(1,0,0), include.mean = FALSE)
+  
+  # fit AR2 model
+  fit_ar2 <- arima(y_train, order = c(2,0,0), include.mean = FALSE)
+  
+  # predict on test set with both model
+  pred_ar1 <- forecast(fit_ar1, h = length(y_test))
+  pred_ar2 <- forecast(fit_ar2, h = length(y_test))
+  
+  # compute RMSE for both models
+  rmse_ar1 <- sqrt(mean((y_test - pred_ar1$mean)^2))
+  rmse_ar2 <- sqrt(mean((y_test - pred_ar2$mean)^2))
+  
+  # compute the MAE for both models
+  mae_ar1 <- mean(abs(y_test - pred_ar1$mean))
+  mae_ar2 <- mean(abs(y_test - pred_ar2$mean))
+  
+  # 80% quantile forecasts
+  q80_ar1 <- pred_ar1$upper[,1]
+  q80_ar2 <- pred_ar2$upper[,1]
+
+  # Quantile score
+  qs_ar1 <- (alpha-1) * (y_test - q80_ar1) * (y_test < q80_ar1) +
+    (alpha) * (y_test - q80_ar1) * (y_test >= q80_ar1)
+
+  qs_ar2 <-  (alpha-1) * (y_test - q80_ar2) * (y_test < q80_ar2) +
+    (alpha) * (y_test - q80_ar2) * (y_test >= q80_ar2)
+
+  # compute mean score quantile score
+  mean_qs_ar1 = mean(qs_ar1)
+  mean_qs_ar2 = mean(qs_ar2)
+
+  # store results in matrix
+  mat_results[b, ] = c(rmse_ar1, rmse_ar2, mae_ar1, mae_ar2, mean_qs_ar1, mean_qs_ar2)
+
+  cat(paste0(b, "\n"))
+}
+
+```
+
+Compare the performance of AR(1) vs. AR(2) using boxplots for each metric:
+– RMSE.
+– MAE.
+– Mean Quantile score.
+
+
+```{r}
+
+# plot results
+colnames(mat_results) <- c("RMSE_AR1", "RMSE_AR2", "MAE_AR1", "MAE_AR2", "QS80_AR1", "QS80_AR2")
+# boxplot comparing ar1 vs ar 2 for each metric
+boxplot(mat_results[,1:2], main = "RMSE comparison AR1 vs AR2", names = c("AR1", "AR2"))
+boxplot(mat_results[,3:4], main = "MAE comparison AR1 vs AR2", names = c("AR1", "AR2"))
+boxplot(mat_results[,5:6], main = "QS80 comparison AR1 vs AR2", names = c("AR1", "AR2"))
+```
+
+
+
+
