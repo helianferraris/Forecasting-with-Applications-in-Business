@@ -1,0 +1,155 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+Exercise 3. Use R to simulate and plot some data from simple ARMA models.
+
+1. Generate data from an AR(1) model with ϕ1 = 0.6 and σ2 = 1. The process starts with y1 = 0. Try several values of ϕ1.
+
+```{r}
+#rm(list = ls())
+library(fable)
+library(tsibble)
+library(dplyr)
+
+set.seed(123)
+
+y <- numeric (100)
+e <- rnorm (100)
+phi <- 0.6
+
+for (i in 2:100){
+  y[i] <- phi *y[i -1] + e[i]
+  }
+
+sim <- tsibble ( idx = seq_len (100) , y = y, index = idx )
+
+
+```
+
+2. Produce a time plot for the series. How does the plot change as you change ϕ1?
+
+```{r}
+
+library(ggplot2)
+
+ggplot(sim, aes(x = idx, y = y)) +
+  geom_line() +
+  labs(title = "AR(1) Model with phi = 0.6",
+       x = "Time", y = "y") +
+  geom_hline(yintercept = 0, color = "blue", linetype = 2)
+
+
+```
+
+3. Write your own code to generate data from an MA(1) model with θ1 = 0.6 and σ2 = 1.
+
+```{r}
+set.seed(12)
+
+Y <- numeric (100)
+eps <- rnorm (100)
+theta <- 0.6
+
+for (i in 2:100){
+  Y[i] <- theta *eps[i-1] + eps[i]
+  }
+
+sim_ma1 <- tsibble ( idx = seq_len (100) , y = Y, index = idx )
+
+```
+
+4. Produce a time plot for the series. How does the plot change as you change θ1?
+
+```{r}
+ggplot(sim_ma1, aes(x = idx, y = y)) +
+  geom_line() +
+  labs(title = "MA(1) Model with theta = 0.6",
+       x = "Time", y = "y") +
+  geom_hline(yintercept = 0, color = "green", linetype = 2)
+
+
+```
+
+5. Generate data from an ARMA(1,1) model with ϕ1 = 0.6, θ1 = 0.6 and σ2 = 1.
+
+```{r}
+
+set.seed(21)
+
+Y <- numeric(100)
+eps <- rnorm(100)
+phi <- 0.6
+theta <- 0.6
+
+for (i in 2:100) {
+  Y[i] <- phi * Y[i-1] + eps[i] + theta * eps[i-1]
+}
+
+sim_arma11 <- tsibble(idx = seq_len(100), y = Y, index = idx)
+
+
+ggplot(sim_arma11, aes(x = idx, y = y)) +
+  geom_line() +
+  labs(title = "ARMA(1,1) Model",
+       x = "Time", y = "Y") +
+  geom_hline(yintercept = 0, color = "blue", linetype = 2)
+
+
+```
+
+6. Generate data from an AR(2) model with ϕ1 =−0.8, ϕ2 = 0.3 and σ2 = 1. Explain why this series appears not-stationary.
+
+```{r}
+
+
+set.seed(123)
+
+Y <- numeric(100)
+eps <- rnorm(100)
+phi1 <- -0.8
+phi2 <- 0.3
+
+for (i in 3:100) {
+  Y[i] <- phi1 * Y[i-1] + phi2 * Y[i-2] + eps[i]
+}
+
+sim_ar2 <- tsibble(idx = seq_len(100), y = Y, index = idx)
+
+
+ggplot(sim_ar2, aes(x = idx, y = y)) +
+  geom_line() +
+  labs(title = "AR(2) Model",
+       x = "Time", y = "Y") +
+  geom_hline(yintercept = 0, color = "blue", linetype = 2)
+
+
+
+```
+
+7. Plot the latter two series and compare them.
+
+```{r}
+
+
+data_arma11 <- as.data.frame(sim_arma11)
+data_ar2 <- as.data.frame(sim_ar2)
+
+data_arma11$model <- "ARMA(1,1)"
+data_ar2$model <- "AR(2)"
+
+both_series <- bind_rows(data_arma11, data_ar2)
+
+ggplot(both_series, aes(x = idx, y = y)) +
+  geom_line() +
+  facet_wrap(~model, scales = "free_y") +
+  labs(
+    title = "ARMA(1,1) vs AR(2)",
+    x = "Time",
+    y = "Y"
+  )
+
+```
+
+
