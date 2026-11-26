@@ -1,0 +1,795 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+**Exercise 2(a): Simulating a VAR(1) in R**
+
+```{r}
+#rm(list = ls())
+library(dplyr)
+```
+
+We need to simulate 500 observations using mvrnorm().
+
+Step 1: Define the parameters
+
+```{r}
+
+n <- 500
+
+A <- matrix(c(0.5, 0.1,
+              0.2, 0.4), nrow = 2)
+
+Sigma <- matrix(c(1, 0.3,                # covariance matrix
+                  0.3, 1), nrow = 2)
+
+```
+
+Step 2: Generate the errors
+
+```{r}
+
+library(MASS)
+
+set.seed(23)
+
+epsilon <- mvrnorm(n,c(0,0),Sigma) # from MASS package
+
+dim(epsilon)
+class(epsilon)
+  
+```
+
+Step 3: Simulate the VAR(1)
+
+```{r}
+
+
+Y <- matrix(0, nrow = n, ncol = 2)
+
+for (t in 2:n) {
+  Y[t, ] <- A %*% Y[t-1, ] + epsilon[t, ]
+}
+
+colnames(Y) <- c("Y1", "Y2")
+
+matplot(Y, type = "l", lty = 1,
+        xlab = "Time", ylab = "Value")
+legend("topright", legend = colnames(Y),
+       col = 1:2, lty = 1)
+dim(Y)
+head(Y)
+
+```
+**Implementing the estimators**
+
+Estimated coefficients matrix (A hat):
+
+```{r}
+
+
+# Current and lagged observations
+Y_current <- Y[2:n, ]
+Y_lag <- Y[1:(n-1), ]
+
+# Estimate A
+A_hat <- t(Y_current) %*% Y_lag %*%
+         solve(t(Y_lag) %*% Y_lag)
+
+A_hat
+
+
+```
+
+Estimated residuals:
+
+```{r}
+
+
+# Calculate residuals
+residuals <- Y_current - Y_lag %*% t(A_hat)
+
+# Check dimensions
+dim(residuals)
+
+# Display first residuals
+head(residuals)
+
+
+```
+Estimated covariance matrix:
+
+```{r}
+
+Sigma_hat <- t(residuals) %*% residuals / (n - 1)
+
+Sigma_hat
+
+```
+
+**Monte Carlo simulation**
+
+Initialize storage matrices:
+
+```{r}
+
+nsim <- 1000
+n <- 500
+
+# Store 4 coefficients of A
+A_estimates <- matrix(NA, nrow = nsim, ncol = 4)
+
+# Store 4 elements of Sigma
+Sigma_estimates <- matrix(NA, nrow = nsim, ncol = 4)
+
+colnames(A_estimates) <- c("a11", "a21", "a12", "a22")
+colnames(Sigma_estimates) <- c("s11", "s21", "s12", "s22")
+
+```
+
+Step 1: Build the Monte Carlo loop
+
+```{r}
+
+set.seed(23)
+
+for (i in 1:nsim) {
+
+  # 1. Generate new errors
+  epsilon <- mvrnorm(
+    n = n,
+    mu = c(0, 0),
+    Sigma = Sigma
+  )
+
+  # 2. Simulate a new VAR(1)
+  Y <- matrix(0, nrow = n, ncol = 2)
+
+  for (t in 2:n) {
+    Y[t, ] <- A %*% Y[t-1, ] + epsilon[t, ]
+  }
+
+  # 3. Construct current and lagged observations
+  Y_current <- Y[2:n, ]
+  Y_lag <- Y[1:(n-1), ]
+
+  # 4. Estimate A
+  A_hat <- t(Y_current) %*% Y_lag %*%
+           solve(t(Y_lag) %*% Y_lag)
+
+  # 5. Compute residuals
+  residuals <- Y_current - Y_lag %*% t(A_hat)
+
+  # 6. Estimate Sigma
+  Sigma_hat <- t(residuals) %*% residuals / (n - 1)
+
+  # 7. Store estimates
+  A_estimates[i, ] <- as.vector(A_hat)
+  Sigma_estimates[i, ] <- as.vector(Sigma_hat)
+}
+
+```
+
+Step 2: Examine the estimates
+
+```{r}
+
+round(colMeans(A_estimates),4)
+round(colMeans(Sigma_estimates),4)
+
+# These calculate the average estimated value of each parameter across the 1,000 simulations.
+```
+Step 3: Plot the boxplots
+
+```{r}
+
+
+par(mfrow = c(1, 2))
+
+# Boxplots for A
+boxplot(A_estimates,
+        main = "Estimates of A",
+        ylab = "Estimated coefficients",
+        col = "lightblue")
+
+points(1:4, as.vector(A),
+       col = "red", pch = 19)
+
+# Boxplots for Sigma
+boxplot(Sigma_estimates,
+        main = "Estimates of Sigma",
+        ylab = "Estimated covariances",
+        col = "lightgreen")
+
+points(1:4, as.vector(Sigma),
+       col = "red", pch = 19)
+
+par(mfrow = c(1, 1))
+
+```
+
+**Exercise 3: Dynamic Factor Models (DFM)**
+
+Load and visualize the UK exports data
+
+```{r}
+library(sparseDFM)
+
+
+# Explore the dataset
+str(exports)
+dim(exports)
+
+colnames(exports)[1:9]
+#head(exports,1)
+
+```
+Extract the 9 target series
+
+```{r}
+
+# Extract the 9 target series
+targets <- exports[, 1:9]
+
+# Remove incomplete rows
+targets_clean <- targets[complete.cases(targets), ] # complete.cases() returns TRUE for rows containing no missing values in the selected columns (we keep only those rows)
+
+# Check dimensions
+dim(targets_clean)
+
+```
+
+Plot the target series
+
+```{r}
+
+# Shorten series names for the legend
+target_names <- sub("^target\\.", "", colnames(targets_clean))
+
+# Plot the 9 target series
+ts.plot(targets_clean,
+        col = 1:9,
+        lty = 1,
+        main = "UK Exports: 9 Target Series",
+        xlab = "Time",
+        ylab = "Exports")
+
+legend("topleft",
+       legend = target_names,
+       col = 1:9,
+       lty = 1,
+       cex = 0.6,
+       bty = "n")
+
+```
+
+```{r}
+
+args(transformData)
+?transformData
+
+```
+
+**b) Apply transformData()**
+
+```{r}
+
+# Apply first differences to all 9 series
+stationary_transform <- rep(2, 9)
+
+targets_diff <- transformData(
+  X = as.matrix(targets_clean),
+  stationary_transform = stationary_transform
+)
+
+dim(targets_diff)
+```
+
+Plot the transformed series
+
+```{r}
+
+
+# Remove rows with missing values after differencing
+targets_diff <- targets_diff[
+  complete.cases(targets_diff), ,
+  drop = FALSE
+]
+
+# Plot transformed series
+ts.plot(targets_diff,
+        col = 1:9,
+        lty = 1,
+        main = "UK Exports: First Differences",
+        xlab = "Year",
+        ylab = "Change in exports")
+
+legend("topleft",
+       legend = sub("^target\\.", "",
+                    colnames(targets)),
+       col = 1:9,
+       lty = 1,
+       cex = 0.6,
+       bty = "n")
+
+
+```
+
+```{r}
+
+# Apply first differences to the complete dataset
+# (9 targets + 436 indicators)
+
+X_clean <- exports[complete.cases(exports), , drop = FALSE]
+
+stationary_transform_full <- rep(2, ncol(X_clean))
+
+X_diff <- transformData(
+  X = as.matrix(X_clean),
+  stationary_transform = stationary_transform_full
+)
+
+# Remove incomplete observations after differencing
+X_diff <- X_diff[
+  complete.cases(X_diff), ,
+  drop = FALSE
+]
+
+dim(X_diff)
+sum(is.na(X_diff))
+
+```
+
+**c) Determine the optimal number of factors**
+
+```{r}
+args(tuneFactors)
+?tuneFactors
+
+```
+
+Select the number of factors
+
+```{r}
+
+# Select the optimal number of factors using Bai-Ng IC2
+r_opt <- tuneFactors(
+  X = X_diff,
+  type = 2,
+  standardize = TRUE,
+  r.max = 15,
+  plot = TRUE
+)
+
+r_opt
+
+```
+
+**d) Fit the Dynamic Factor Model using sparseDFM()**
+
+```{r}
+?sparseDFM
+```
+
+Fit the standard DFM:
+
+```{r}
+library(sparseDFM)
+
+# Standard Dynamic Factor Model (alg = 'EM')
+fit_dfm <- sparseDFM(
+  X = X_diff,
+  r = 7,
+  alg = "EM",
+  standardize = TRUE
+)
+
+
+```
+
+Fit the sparse DFM:
+
+```{r}
+
+# Sparse Dynamic Factor Model
+# Keep the 9 export targets unpenalized
+fit_sdfm <- sparseDFM(
+  X = X_diff,
+  r = 7,
+  q = 9,
+  alg = "EM-sparse",
+  standardize = TRUE
+)
+
+```
+
+Check the fitted models :
+
+```{r}
+# Dimensions of the estimated factor and loading matrices
+dim(fit_dfm$state$factors)
+dim(fit_dfm$params$Lambda)
+
+dim(fit_sdfm$state$factors)
+dim(fit_sdfm$params$Lambda)
+
+# Check convergence
+fit_dfm$em$converged
+fit_sdfm$em$converged
+```
+**e) Plot the estimated factors and loadings**
+
+```{r}
+
+# Estimated factors: standard DFM
+plot(fit_dfm, type = "factor")
+
+# Estimated factors: sparse DFM
+plot(fit_sdfm, type = "factor")
+
+```
+
+**Factor loadings**
+
+Heatmap - Standard DFM model:
+
+```{r}
+# Extract loading matrices
+L_dfm <- fit_dfm$params$Lambda
+L_sdfm <- fit_sdfm$params$Lambda
+
+# Plot standard DFM loadings
+image(
+  x = 1:nrow(L_dfm),
+  y = 1:ncol(L_dfm),
+  z = L_dfm,
+  col = colorRampPalette(c("blue", "white", "red"))(100),
+  xlab = "Series",
+  ylab = "Factor",
+  main = "Standard DFM: Factor Loadings",
+  axes = FALSE
+)
+
+axis(2, at = 1:7, labels = paste0("F", 1:7))
+axis(1, at = seq(1, nrow(L_dfm), by = 50))
+```
+
+Heatmap - Sparse DFM model:
+
+```{r}
+# Use the same color scale for both models
+limit <- max(abs(c(L_dfm, L_sdfm)))
+
+colors <- colorRampPalette(
+  c("blue", "white", "red")
+)(100)
+
+image(
+  x = 1:nrow(L_sdfm),
+  y = 1:ncol(L_sdfm),
+  z = L_sdfm,
+  col = colors,
+  zlim = c(-limit, limit),
+  xlab = "Series",
+  ylab = "Factor",
+  main = "Sparse DFM: Factor Loadings",
+  axes = FALSE
+)
+
+axis(2, at = 1:7, labels = paste0("F", 1:7))
+axis(1, at = seq(1, nrow(L_sdfm), by = 50))
+```
+
+**Identify the indicator groups**
+
+```{r}
+# Extract the second part of each variable name
+groups <- sub("^indicators\\.([^.]+)\\..*$", "\\1",
+              colnames(X_diff))
+
+# Keep export targets in their own group
+groups[grepl("^target\\.", colnames(X_diff))] <- "target"
+
+# Count variables in each group
+table(groups)
+```
+
+Correct the group labels
+
+```{r}
+
+# Correct and standardize group labels
+groups[groups == "target"] <- "TiG"
+groups[groups == "iop"] <- "IoP"
+groups[groups == "cpi"] <- "CPI"
+groups[groups == "ppi"] <- "PPI"
+groups[groups == "exchange"] <- "Exch"
+groups[groups == "google"] <- "GT"
+groups[groups %in% c("indicators.bci", "indicators.cci")] <- "Conf"
+
+table(groups)
+```
+
+Identify which groups drive each factor
+
+```{r}
+# Average absolute sparse loading by indicator group
+group_loading <- sapply(
+  unique(groups),
+  function(g) {
+    colMeans(abs(L_sdfm[groups == g, , drop = FALSE]))
+  }
+)
+
+rownames(group_loading) <- paste0("Factor ", 1:7)
+
+round(group_loading, 3)
+```
+
+**Additional visualization for e)**
+
+```{r}
+# Colors for each indicator group
+group_colors <- c(
+  TiG = "orange",
+  IoP = "forestgreen",
+  CPI = "royalblue",
+  PPI = "purple",
+  Exch = "gold",
+  Conf = "brown",
+  GT = "turquoise"
+)
+
+series_colors <- group_colors[groups]
+
+# Common scale for both models
+limit <- max(abs(c(L_dfm, L_sdfm)))
+heat_colors <- colorRampPalette(
+  c("blue", "white", "red")
+)(100)
+
+# Plot heatmap and group strip in one coordinate system
+par(mar = c(5, 4, 3, 2))
+
+image(
+  x = 1:nrow(L_sdfm),
+  y = 1:ncol(L_sdfm),
+  z = L_sdfm,
+  col = heat_colors,
+  zlim = c(-limit, limit),
+  xlim = c(0.5, nrow(L_sdfm) + 0.5),
+  ylim = c(0, 7.5),
+  axes = FALSE,
+  xlab = "Series",
+  ylab = "Factor",
+  main = "Sparse DFM: Loadings by Indicator Group"
+)
+
+axis(1, at = seq(50, 400, 50))
+axis(2, at = 1:7, labels = paste0("F", 1:7))
+
+# Colored strip below Factor 1
+rect(
+  xleft = seq_len(nrow(L_sdfm)) - 0.5,
+  ybottom = 0,
+  xright = seq_len(nrow(L_sdfm)) + 0.5,
+  ytop = 0.3,
+  col = series_colors,
+  border = NA
+)
+
+# Legend
+legend(
+  "topright",
+  legend = names(group_colors),
+  fill = group_colors,
+  cex = 0.7,
+  bty = "n",
+  ncol = 2
+)
+```
+**f) Monte-Carlo simulation**
+
+Check the fitted model parameters
+
+```{r}
+names(fit_sdfm$params)
+
+str(fit_sdfm$params, max.level = 1)
+
+names(fit_sdfm$state)
+```
+Run the Monte Carlo simulation
+
+```{r}
+
+library(MASS)
+
+set.seed(23)
+
+nsim <- 200
+h <- 10
+
+# Estimated sparse DFM parameters
+A <- fit_sdfm$params$A
+Lambda <- fit_sdfm$params$Lambda
+Sigma_u <- fit_sdfm$params$Sigma_u
+Sigma_epsilon <- fit_sdfm$params$Sigma_epsilon
+
+# Last estimated factor values
+F_last <- as.numeric(
+  tail(fit_sdfm$state$factors, 1)
+)
+
+# Target series: first 9 variables
+target_idx <- 1:9
+target_names <- colnames(X_diff)[target_idx]
+
+# Store simulated forecasts: month x target x simulation
+sim_forecasts <- array(
+  NA_real_,
+  dim = c(h, 9, nsim)
+)
+
+# Monte Carlo simulation
+for (s in 1:nsim) {
+
+  F_current <- F_last
+
+  for (t in 1:h) {
+
+    # Simulate factor innovations
+    u_t <- as.numeric(
+      mvrnorm(1, mu = rep(0, 7), Sigma = Sigma_u)
+    )
+
+    # Forecast next factors
+    F_current <- as.numeric(A %*% F_current + u_t)
+
+    # Simulate observation errors for 9 targets
+    epsilon_t <- rnorm(
+      9,
+      mean = 0,
+      sd = sqrt(Sigma_epsilon[target_idx])
+    )
+
+    # Simulated target values (standardized differences)
+    sim_forecasts[t, , s] <-
+      as.numeric(Lambda[target_idx, ] %*% F_current) +
+      epsilon_t
+  }
+}
+
+# Compute 5th, 50th and 95th percentiles
+forecast_quantiles <- apply(
+  sim_forecasts,
+  c(1, 2),
+  quantile,
+  probs = c(0.05, 0.50, 0.95)
+)
+
+dim(forecast_quantiles)
+```
+
+Plot the forecasts
+
+```{r}
+
+# Reverse standardization of the simulated differences
+target_mean <- colMeans(X_diff)[1:9]
+target_sd <- apply(X_diff[, 1:9], 2, sd)
+
+sim_diff <- sweep(
+  sim_forecasts, 2, target_sd, "*"
+)
+
+sim_diff <- sweep(
+  sim_diff, 2, target_mean, "+"
+)
+
+# Convert monthly differences into export levels
+last_levels <- as.numeric(
+  tail(X_clean[, 1:9], 1)
+)
+
+sim_levels <- sim_diff
+
+for (s in 1:nsim) {
+  for (j in 1:9) {
+    sim_levels[, j, s] <-
+      last_levels[j] + cumsum(sim_diff[, j, s])
+  }
+}
+
+# Prediction intervals and median forecasts
+forecast_levels <- apply(
+  sim_levels,
+  c(1, 2),
+  quantile,
+  probs = c(0.05, 0.50, 0.95)
+)
+
+# Plot all nine targets
+par(mfrow = c(3, 3), mar = c(3, 3, 3, 1))
+
+for (j in 1:9) {
+
+  lower <- forecast_levels[1, , j]
+  median <- forecast_levels[2, , j]
+  upper <- forecast_levels[3, , j]
+
+  plot(
+    1:h, median,
+    type = "l",
+    lwd = 2,
+    col = "blue",
+    ylim = range(lower, upper, last_levels[j]),
+    xlab = "Months ahead",
+    ylab = "Export level",
+    main = sub("^target\\.", "", target_names[j])
+  )
+
+  polygon(
+    c(1:h, h:1),
+    c(lower, rev(upper)),
+    col = adjustcolor("lightblue", alpha.f = 0.5),
+    border = NA
+  )
+
+  lines(1:h, median, col = "blue", lwd = 2)
+  lines(1:h, lower, col = "red", lty = 2)
+  lines(1:h, upper, col = "red", lty = 2)
+
+  abline(h = last_levels[j], col = "gray50", lty = 3)
+}
+
+par(mfrow = c(1, 1))
+```
+**g) Identify COVID-19 and the 2009 recession**
+
+```{r}
+# Estimated factors
+F_est <- fit_sdfm$state$factors
+
+# Reconstruct monthly dates from the original dataset
+all_dates <- time(exports)
+
+# Keep dates corresponding to complete observations
+clean_dates <- all_dates[complete.cases(exports)]
+
+# First differencing removes the first observation
+diff_dates <- tail(clean_dates, nrow(X_diff))
+
+# Check alignment
+stopifnot(length(diff_dates) == nrow(F_est))
+
+# Economic event periods
+recession <- diff_dates >= 2008.5 & diff_dates < 2010
+covid <- diff_dates >= 2020 & diff_dates < 2021
+
+# Verify that observations were selected
+cat("Recession observations:", sum(recession), "\n")
+cat("COVID observations:", sum(covid), "\n")
+
+# Compare factor movements relative to their usual variability
+F_scaled <- scale(F_est)
+
+recession_strength <- apply(
+  abs(F_scaled[recession, , drop = FALSE]), 2, max
+)
+
+covid_strength <- apply(
+  abs(F_scaled[covid, , drop = FALSE]), 2, max
+)
+
+names(recession_strength) <- paste0("Factor ", 1:7)
+names(covid_strength) <- paste0("Factor ", 1:7)
+
+cat("\n2008–2009 recession:\n")
+print(sort(recession_strength, decreasing = TRUE))
+
+cat("\nCOVID-19 period:\n")
+print(sort(covid_strength, decreasing = TRUE))
+```
+

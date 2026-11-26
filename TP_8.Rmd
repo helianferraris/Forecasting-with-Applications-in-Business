@@ -1,0 +1,972 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+**Exercise 1.**
+
+In R, work with the package fpp3 and load the data set books. The data set books contains the daily sales of paperback and hardcover books at the same store. The task is to forecast the next four days’ sales for paperback and hardcover books.
+
+a. Plot the series and discuss the main features of the data.
+
+```{r}
+#rm(list = ls())
+
+library(fpp2)
+
+head(books)
+
+autoplot(books) +
+  labs(
+    title = "Daily Book Sales",
+    x = "Day",
+    y = "Number of Books Sold"
+  )
+```
+
+b. Use simple exponential smoothing with the ses function (setting initial="simple") and explore different values of α for the paperback series. Record the within-sample SSE for the one-step forecasts. Plot SSE against αand find which value of αworks best. What is the effect of αon the forecasts?
+
+Step 1: Test different values of α
+
+```{r}
+library(forecast)
+
+alphas <- seq(0.1, 0.9, by = 0.1)
+
+sse <- numeric(length(alphas))
+
+for (i in seq_along(alphas)) {
+  fit <- ses(books[, "Paperback"],
+             alpha = alphas[i],
+             initial = "simple",
+             h = 4)
+
+  sse[i] <- sum(residuals(fit)^2)
+}
+
+results <- data.frame(alpha = alphas, SSE = sse)
+
+print(results)
+```
+
+Step 2: Plot SSE against α (lower is better for SSE)
+
+```{r}
+library(ggplot2)
+
+ggplot(results, aes(x = alpha, y = SSE)) +
+  geom_line(color = "blue") +
+  geom_point(color = "red", size = 2) +
+  labs(
+    title = "SSE vs Alpha",
+    x = "Alpha",
+    y = "Sum of Squared Errors"
+  ) +
+  theme_minimal()
+```
+
+c. Now let ses select the optimal value of α. Use this value to generate forecasts for the next four days. Compare your results with 2.
+
+```{r}
+fit_opt <- ses(
+  books[, "Paperback"],
+  initial = "simple",
+  h = 4
+)
+
+summary(fit_opt)
+
+autoplot(fit_opt) +
+  labs(
+    title = "SES Forecast for Paperback Sales",
+    x = "Day",
+    y = "Paperback Sales"
+  )
+```
+
+d. Repeat but with initial="optimal". How much difference does an optimal initial level make?
+
+```{r}
+
+fit_opt_initial <- ses(
+  books[, "Paperback"],
+  initial = "optimal",
+  h = 4
+)
+
+summary(fit_opt_initial)
+
+```
+
+**Exercise 2.**
+
+Use the data set books from the package fpp3, to repeat the analysis with several variants of a Holt’s model:
+
+1. A Holt’s model with the holt function in R. Summarize the results, plot the series and add the past forecasts. Start first with some random choices for α and ˜β(etc.) and proceed after checking and choosing the model with the optimal choices for them.
+
+Note: there are some constraints on the parameters: 0 < α < 1, 0 ⩽ ˜β ⩽ 1, 0 < γ < 1−α, 0.8 < Φ <0.98. 
+Parameter γ is only needed for seasonality effect. Parameter Φ is needed in case of damping effect.
+
+```{r}
+library(forecast)
+
+holt_manual <- holt(
+  books[, "Paperback"],
+  alpha = 0.2,
+  beta = 0.1,
+  h = 4
+)
+
+summary(holt_manual)
+
+autoplot(holt_manual) +
+  autolayer(fitted(holt_manual), series = "Fitted") +
+  labs(
+    title = "Holt's Linear Trend Method",
+    x = "Day",
+    y = "Paperback Sales"
+  )
+```
+Optimize Holt's parameters
+
+```{r}
+holt_opt <- holt(
+  books[, "Paperback"],
+  h = 4
+)
+
+summary(holt_opt)
+```
+2. A Holt’s model with damped trend (see options in ?holt). Summarize it, plot the series and add the past forecasts.
+
+```{r}
+
+holt_damped <- holt(
+  books[, "Paperback"],
+  damped = TRUE,
+  h = 4
+)
+
+summary(holt_damped)
+
+autoplot(holt_damped) +
+  autolayer(fitted(holt_damped), series = "Fitted") +
+  labs(
+    title = "Holt's Damped Trend Method",
+    x = "Day",
+    y = "Paperback Sales"
+  )
+
+```
+3. A Holt’s model with the ets function. Summarize it, plot the decomposition, plot the forecast and add the past forecasts.
+
+```{r}
+
+library(forecast)
+
+ets_fit <- ets(books[, "Paperback"])
+
+summary(ets_fit)
+
+autoplot(forecast(ets_fit, h = 4)) +
+  autolayer(fitted(ets_fit), series = "Fitted") +
+  labs(
+    title = "ETS Forecast for Paperback Sales",
+    x = "Day",
+    y = "Paperback Sales"
+  )
+
+```
+Inspecting the estimated components:
+
+```{r}
+autoplot(ets_fit)
+```
+
+Exercise 3. 
+
+Use the domotic data set (Domotic2.xlsx) available in Moodle under datasets. It was retrieved from http://archive.ics.uci.edu/ml/datasets/SML2010. You can use this link to see a description of the data set. In this exercise, the weather temperature is to be predicted (WeatherTemperature). This is indeed an important information to set the working parameters of the domotic house.
+
+1. Load the data, take only the data of April (18.04.2012 - 30.04.2012) and the temperature column (Temperature_Comedor_Sensor) and plot them. Do you think it can be predicted using a Holt-Winters method? Why?
+
+Step 1: Load the Excel file in R
+
+```{r}
+library(readxl)
+library(dplyr)
+library(ggplot2)
+
+domotic <- read_excel(file.choose('/Users/helianferraris/Desktop/Forecasting with Applications in Business/Practical 8/Domotic2.xlsx'))
+
+head(domotic)
+
+```
+
+Step 2: Select the April observations
+
+```{r}
+
+april <- domotic %>%
+  mutate(
+    datetime = as.POSIXct(
+      paste(
+        format(Date, "%Y-%m-%d"),
+        format(Time, "%H:%M:%S")
+      ),
+      format = "%Y-%m-%d %H:%M:%S",
+      tz = "UTC"
+    )
+  ) %>%
+  filter(
+    datetime >= as.POSIXct("2012-04-18", tz = "UTC"),
+    datetime < as.POSIXct("2012-05-01", tz = "UTC")
+  ) %>%
+  arrange(datetime)
+
+```
+
+Step 3: Plot the temperature
+
+```{r}
+
+ggplot(april, aes(
+  x = datetime,
+  y = Temperature_Comedor_Sensor
+)) +
+  geom_line(color = "steelblue") +
+  labs(
+    title = "Dining Room Temperature - April 2012",
+    x = "Date",
+    y = "Temperature (°C)"
+  ) +
+  scale_x_datetime(
+    date_breaks = "2 days",
+    date_labels = "%d %b"
+  ) +
+  theme_minimal()
+
+```
+2. Compute the hourly averages over this period and build a ts object with them (seasonality 24 hours). Use this object to make a forecast for May. Plot the forecasts. Note: use the prediction model you think is the most appropriate.
+
+Step 1: Calculate hourly averages
+
+```{r}
+
+library(lubridate)
+
+hourly_april <- april %>%
+  mutate(hour = floor_date(datetime, unit = "hour")) %>%
+  group_by(hour) %>%
+  summarise(
+    temperature = mean(Temperature_Comedor_Sensor, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+head(hourly_april)
+```
+
+Step 2: Create a time series
+
+```{r}
+temp_ts <- ts(
+  hourly_april$temperature,
+  frequency = 24
+)
+
+autoplot(temp_ts) +
+  labs(
+    title = "Hourly Average Temperature",
+    x = "Time (days)",
+    y = "Temperature (°C)"
+  )
+```
+Step 3: Fit a seasonal ETS model
+
+```{r}
+
+temp_model <- ets(temp_ts, model = "ANA")
+
+summary(temp_model)
+```
+Forecasting May
+
+```{r}
+
+temp_forecast <- forecast(
+  temp_model,
+  h = 31 * 24
+)
+
+autoplot(temp_forecast) +
+  labs(
+    title = "Hourly Temperature Forecast for May",
+    x = "Time (days)",
+    y = "Temperature (°C)"
+  )
+
+
+```
+3. Compare your forecast with the observed data for May. Does the prediction look good?
+
+Step 1: Extract May observations
+
+```{r}
+may <- domotic %>%
+  mutate(
+    datetime = as.POSIXct(
+      paste(
+        format(Date, "%Y-%m-%d"),
+        format(Time, "%H:%M:%S")
+      ),
+      format = "%Y-%m-%d %H:%M:%S",
+      tz = "UTC"
+    )
+  ) %>%
+  filter(
+    datetime >= as.POSIXct("2012-05-01", tz = "UTC"),
+    datetime < as.POSIXct("2012-06-01", tz = "UTC")
+  ) %>%
+  arrange(datetime)
+
+nrow(may)
+```
+
+Step 2: Calculate hourly May temperatures
+
+```{r}
+hourly_may <- may %>%
+  mutate(hour = floor_date(datetime, unit = "hour")) %>%
+  group_by(hour) %>%
+  summarise(
+    temperature = mean(
+      Temperature_Comedor_Sensor,
+      na.rm = TRUE
+    ),
+    .groups = "drop"
+  )
+
+head(hourly_may)
+
+```
+
+Step 3: Check whether May data is available
+
+```{r}
+nrow(hourly_may)
+range(hourly_may$hour)
+```
+
+Compare forecasts with actual temperatures
+
+Step 1: Extract the first 32 forecasts
+
+```{r}
+n <- nrow(hourly_may)
+
+comparison <- data.frame(
+  hour = hourly_may$hour,
+  Actual = hourly_may$temperature,
+  Forecast = as.numeric(temp_forecast$mean)[1:n]
+)
+
+head(comparison)
+```
+
+Step 2: Plot actual vs forecast
+
+```{r}
+
+library(ggplot2)
+
+ggplot(comparison, aes(x = hour)) +
+  geom_line(aes(y = Actual, color = "Actual"),
+            linewidth = 1) +
+  geom_line(aes(y = Forecast, color = "Forecast"),
+            linewidth = 1, linetype = "dashed") +
+  labs(
+    title = "Actual vs Forecast Temperature - May 2012",
+    x = "Date",
+    y = "Temperature (°C)",
+    color = "Series"
+  ) +
+  theme_minimal()
+
+```
+
+Step 3: Calculate out-of-sample errors
+
+```{r}
+
+RMSE <- sqrt(mean(
+  (comparison$Actual - comparison$Forecast)^2
+))
+
+MAE <- mean(
+  abs(comparison$Actual - comparison$Forecast)
+)
+
+MAPE <- mean(
+  abs((comparison$Actual - comparison$Forecast) /
+        comparison$Actual)
+) * 100
+
+data.frame(RMSE, MAE, MAPE)
+
+```
+
+4. Can this analysis be repeated for CO2ComedorSensor variable? Plot the series of data and comment the previous question.
+
+```{r}
+ggplot(april, aes(
+  x = datetime,
+  y = CO2_Comedor_Sensor
+)) +
+  geom_line(color = "darkgreen") +
+  labs(
+    title = "Dining Room CO2 - April 2012",
+    x = "Date",
+    y = "CO2 Concentration"
+  ) +
+  scale_x_datetime(
+    date_breaks = "2 days",
+    date_labels = "%d %b"
+  ) +
+  theme_minimal()
+```
+
+Let's test whether seasonality actually helps
+
+```{r}
+hourly_co2 <- april %>%
+  mutate(hour = floor_date(datetime, "hour")) %>%
+  group_by(hour) %>%
+  summarise(
+    co2 = mean(CO2_Comedor_Sensor, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+co2_ts <- ts(hourly_co2$co2, frequency = 24)
+
+# Seasonal model
+co2_seasonal <- ets(co2_ts, model = "ANA")
+
+# Automatic model selection
+co2_auto <- ets(co2_ts)
+
+summary(co2_seasonal)
+summary(co2_auto)
+```
+
+***Exercise 4.**
+
+Dataset global_economy contains the annual Exports from many countries. Select one country to analyse.
+
+1. Plot the Exports series for selected country and discuss the main features of the data.
+
+```{r}
+library(fpp3)
+
+data("global_economy")
+
+
+switzerland <- global_economy %>%
+  filter(Country == "Switzerland")
+
+autoplot(switzerland, Exports) +
+  labs(
+    title = "Swiss Exports Over Time",
+    x = "Year",
+    y = "Exports"
+  )
+```
+
+**Preparing the data:**
+
+Examining missing observations
+
+```{r}
+switzerland %>%
+  filter(is.na(Exports)) %>%
+  select(Year, Exports)
+
+switzerland %>%
+  summarise(
+    total = n(),
+    missing = sum(is.na(Exports))
+  )
+```
+2. Use one of the viewed methods (simple exponential smoothing, Holt, Holt-Winter) which is appropriated to your series. Justify your choice. Comment on your model’s parameter(s). How well does your model fit the data?
+
+Create a clean time series
+```{r}
+
+swiss_clean <- switzerland %>%
+  filter(Year >= 1980, !is.na(Exports))
+
+swiss_ts <- ts(
+  swiss_clean$Exports,
+  start = 1980,
+  frequency = 1
+)
+
+plot(
+  swiss_ts,
+  main = "Swiss Exports (1980 onwards)",
+  xlab = "Year",
+  ylab = "Exports (% of GDP)",
+  col = "blue"
+)
+```
+Fit three forecasting models
+
+```{r}
+
+# Simple exponential smoothing
+model_ses <- ses(swiss_ts, h = 5)
+
+# Holt's linear trend
+model_holt <- holt(swiss_ts, h = 5)
+
+# Holt's damped trend
+model_damped <- holt(
+  swiss_ts,
+  h = 5,
+  damped = TRUE
+)
+```
+
+Compare model accuracy
+
+```{r}
+
+comparison <- data.frame(
+  Model = c("SES", "Holt", "Damped Holt"),
+  RMSE = c(
+    accuracy(model_ses)[1, "RMSE"],
+    accuracy(model_holt)[1, "RMSE"],
+    accuracy(model_damped)[1, "RMSE"]
+  ),
+  MAE = c(
+    accuracy(model_ses)[1, "MAE"],
+    accuracy(model_holt)[1, "MAE"],
+    accuracy(model_damped)[1, "MAE"]
+  )
+)
+
+comparison
+
+```
+
+4. Provide forecast for 5 steps ahead. Does your prediction look good? Please, explain.
+
+```{r}
+
+autoplot(swiss_ts) +
+  autolayer(model_ses$mean,
+            series = "SES") +
+  autolayer(model_holt$mean,
+            series = "Holt") +
+  autolayer(model_damped$mean,
+            series = "Damped Holt") +
+  labs(
+    title = "Swiss Exports: Forecast Comparison",
+    x = "Year",
+    y = "Exports (% of GDP)",
+    colour = "Method"
+  ) +
+  theme_minimal()
+```
+
+Checking the residuals
+
+```{r}
+
+checkresiduals(model_holt)
+
+```
+Ljung-Box test:
+
+```{r}
+Box.test(
+  residuals(model_holt),
+  lag = 10,
+  type = "Ljung-Box",
+  fitdf = 2
+)
+```
+
+**Exercise 5.**
+
+Use the data set books from the package fpp3 to explore Holt’s exponential smoothing model with damping. Throughout this exercise, focus on how the state equations of the model can be used to simulate future paths and compute forecast-based quantities.
+
+1. Convert the data to a tsibble object and fit a damped Holt model (ETS(A,Ad,N)) to the paperback series.
+
+• Plot the observed series, fitted values, and 10-step-ahead forecasts.
+
+• Report the estimated smoothing parameters and final state values.
+
+```{r}
+# Step 1: Convert books to a tsibble
+
+books_ts <- tibble(
+  Day = 1:nrow(books),
+  Paperback = as.numeric(books[, "Paperback"]),
+  Hardcover = as.numeric(books[, "Hardcover"])
+) %>%
+  as_tsibble(index = Day)
+
+head(books_ts)
+names(books_ts) # 'Day','Paperback','Hardcover'
+is_tsibble(books_ts) # TRUE
+```
+
+```{r}
+# Step 2: Fit ETS(A,Ad,N)
+
+fit_damped <- books_ts %>%
+  model(
+    Damped = ETS(
+      Paperback ~ error("A") +
+        trend("Ad") +
+        season("N")
+    )
+  )
+
+report(fit_damped)
+
+
+```
+
+```{r}
+# Step 3: Forecast 10 days ahead
+
+fc_damped <- fit_damped %>%
+  forecast(h = 10)
+
+aug_damped <- augment(fit_damped)
+
+books_ts %>%
+  autoplot(Paperback, colour = "black") +
+  autolayer(
+    aug_damped,
+    .fitted,
+    colour = "red"
+  ) +
+  autolayer(
+    fc_damped,
+    colour = "blue"
+  ) +
+  labs(
+    title = "Damped Holt Model: Paperback Sales",
+    x = "Day",
+    y = "Number of Books Sold"
+  )
+
+```
+
+```{r}
+
+# Extract the final states
+components(fit_damped)
+
+# To inspect the final values:
+components(fit_damped) |>
+  tail(1)
+
+```
+
+2. Identify and write down the state equations corresponding to the damped Holt model based on the ETS table.
+
+• Specify the measurement equation and the state update equations.
+
+• Clearly define all parameters and states involved.
+
+```{r}
+# see written report
+```
+
+3. Using the state equations and the estimated parameters, simulate one future trajectory over the next h= 10 periods.
+
+• Initialize the states with the final estimates.
+
+• Generate Gaussian innovations εt∼N(0,^σ2).
+
+• Plot the simulated path together with the historical series.
+
+```{r}
+
+set.seed(123)
+
+# Estimated parameters
+alpha <- 0.03259223
+beta  <- 0.0001000242
+phi   <- 0.98
+sigma <- sqrt(1220.294)
+
+# Final states
+l <- 208.2084
+b <- 0.9943547
+
+# Forecast horizon
+h <- 10
+
+# Store simulated sales
+sim_sales <- numeric(h)
+
+for (i in 1:h) {
+
+  # Generate a random innovation
+  epsilon <- rnorm(1, mean = 0, sd = sigma)
+
+  # Simulate next observation
+  sim_sales[i] <- l + phi * b + epsilon
+
+  # Update the states
+  l_new <- l + phi * b + alpha * epsilon
+  b_new <- phi * b + beta * epsilon
+
+  l <- l_new
+  b <- b_new
+}
+
+sim_sales
+
+```
+
+```{r}
+# Plot the simulated trajectory
+
+# Create a dataframe with simulated values
+sim_df <- tibble(
+  Day = 31:40,
+  Simulated = sim_sales
+)
+
+# Plot historical and simulated sales
+ggplot() +
+  geom_line(
+    data = books_ts,
+    aes(x = Day, y = Paperback),
+    colour = "black",
+    linewidth = 0.8
+  ) +
+  geom_line(
+    data = sim_df,
+    aes(x = Day, y = Simulated),
+    colour = "blue",
+    linewidth = 1
+  ) +
+  geom_point(
+    data = sim_df,
+    aes(x = Day, y = Simulated),
+    colour = "blue"
+  ) +
+  geom_vline(
+    xintercept = 30.5,
+    linetype = "dashed",
+    colour = "grey50"
+  ) +
+  labs(
+    title = "One Simulated Future Path: Paperback Sales",
+    subtitle = "ETS(A,Ad,N) with Gaussian innovations",
+    x = "Day",
+    y = "Number of Books Sold"
+  ) +
+  theme_minimal()
+```
+
+4. Repeat the simulation Rtimes (e.g. R= 1000) and store all simulated paths. Use these to:
+
+• Compute 95% prediction intervals for each horizon t+ 1,...,t+ h.
+
+```{r}
+
+# Step 1: Generate 1,000 simulated trajectories
+
+set.seed(123)
+
+R <- 1000
+h <- 10
+
+# Store simulations: rows = simulations, columns = days
+sim_matrix <- matrix(NA, nrow = R, ncol = h)
+
+for (r in 1:R) {
+
+  # Reset states for each simulation
+  l <- 208.2084
+  b <- 0.9943547
+
+  for (i in 1:h) {
+
+    epsilon <- rnorm(1, mean = 0, sd = sigma)
+
+    # Simulate sales
+    sim_matrix[r, i] <- l + phi * b + epsilon
+
+    # Update states
+    l_new <- l + phi * b + alpha * epsilon
+    b_new <- phi * b + beta * epsilon
+
+    l <- l_new
+    b <- b_new
+  }
+}
+
+```
+
+```{r}
+
+# Step 2: Verify the simulations
+
+dim(sim_matrix) # [1] 1000   10
+# This means we have 1,000 simulated trajectories, each containing 10 future observations.
+
+round(sim_matrix[1:5, ], 2)
+
+```
+
+```{r}
+
+# Step 3: Calculate the 95% prediction intervals
+
+# Calculate 95% prediction intervals
+lower_95 <- apply(
+  sim_matrix, 2, quantile, probs = 0.025
+)
+
+upper_95 <- apply(
+  sim_matrix, 2, quantile, probs = 0.975
+)
+
+# Calculate mean simulated sales
+mean_forecast <- colMeans(sim_matrix)
+
+# Combine results
+prediction_intervals <- tibble(
+  Day = 31:40,
+  Mean = mean_forecast,
+  Lower_95 = lower_95,
+  Upper_95 = upper_95
+)
+
+print(prediction_intervals)
+
+```
+
+```{r}
+
+# Step 4: Plot the prediction intervals
+
+ggplot() +
+  geom_line(
+    data = books_ts,
+    aes(x = Day, y = Paperback),
+    colour = "black"
+  ) +
+  geom_ribbon(
+    data = prediction_intervals,
+    aes(
+      x = Day,
+      ymin = Lower_95,
+      ymax = Upper_95
+    ),
+    fill = "skyblue",
+    alpha = 0.4
+  ) +
+  geom_line(
+    data = prediction_intervals,
+    aes(x = Day, y = Mean),
+    colour = "blue",
+    linewidth = 1
+  ) +
+  geom_vline(
+    xintercept = 30.5,
+    linetype = "dashed"
+  ) +
+  labs(
+    title = "Monte Carlo 95% Prediction Intervals",
+    x = "Day",
+    y = "Paperback Sales"
+  ) +
+  theme_minimal()
+
+```
+
+• Analyze the distribution of total sales over the next 5 periods (histogram and summary statistics).
+
+```{r}
+
+# Step 5: Calculate total sales
+
+# Sum sales over the first five future days
+total_sales_5 <- rowSums(sim_matrix[, 1:5])
+
+# Summary statistics
+summary(total_sales_5)
+
+sd(total_sales_5)
+
+# 95% interval for total sales
+quantile(total_sales_5, c(0.025, 0.975))
+
+```
+
+```{r}
+
+# Step 6: Plot the distribution
+
+ggplot(
+  tibble(TotalSales = total_sales_5),
+  aes(x = TotalSales)
+) +
+  geom_histogram(
+    bins = 30,
+    fill = "steelblue",
+    colour = "white"
+  ) +
+  geom_vline(
+    xintercept = mean(total_sales_5),
+    colour = "red",
+    linetype = "dashed",
+    linewidth = 1
+  ) +
+  labs(
+    title = "Distribution of Total Paperback Sales",
+    subtitle = "Next 5 days, based on 1,000 simulations",
+    x = "Total Sales Over 5 Days",
+    y = "Frequency"
+  ) +
+  theme_minimal()
+
+```
+
+• Estimate the probability that sales increase for three consecutive days.
+
+```{r}
+
+# Step 7: Calculate the probability
+
+# Function to check for 3 consecutive increases
+three_increases <- function(x) {
+
+  increases <- diff(x) > 0
+
+  any(
+    increases[-c(1, 2)] &
+    increases[-c(1, length(increases))] &
+    increases[-c(length(increases) - 1, length(increases))]
+  )
+}
+
+# Apply to each simulated trajectory
+results <- apply(sim_matrix, 1, three_increases)
+
+# Estimated probability
+probability <- mean(results)
+
+probability
+
+```
+
+

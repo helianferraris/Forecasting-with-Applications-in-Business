@@ -1,0 +1,109 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+**Exercise 2**
+
+The data set aus_arrivals in package fpp3 contains the quarterly number of international visitors to Australia from several countries for the period 1981 Q1 – 2012 Q3.
+
+1. Select country Japan and plot the data. 
+
+2. Plot the ACF and PACF graphs.
+
+```{r}
+
+library(fpp3)
+
+japan <- aus_arrivals |> filter(Origin == "Japan")
+
+japan |> autoplot(Arrivals)
+japan |> gg_season(Arrivals)
+japan |> gg_subseries(Arrivals)
+
+japan |> ACF(Arrivals, lag_max = 24) |> autoplot()
+japan |> PACF(Arrivals, lag_max = 24) |> autoplot()
+
+```
+
+3. Compute an appropriate differencing to obtain stationary data. Plot the result. Hint: You can use the so-called KPSS test to test for stationarity: features(diff, unitroot_kpss)
+
+```{r}
+
+japan <- aus_arrivals |> filter(Origin == "Japan")
+
+# Step 0: what does R suggest?
+japan |> features(Arrivals, list(unitroot_nsdiffs, unitroot_ndiffs))
+
+# Step 1: seasonal difference, then test (removes the seasonality)
+japan_d <- japan |> mutate(diff = difference(Arrivals, 4))
+japan_d |> features(diff, unitroot_kpss)
+
+# Step 2: if KPSS still rejects, add a first difference, then test again
+japan_d <- japan_d |> mutate(diff2 = difference(diff, 1))
+japan_d |> features(diff2, unitroot_kpss)
+
+# Step 3: plot the final differenced series
+japan_d |> autoplot(diff2)
+
+```
+
+4. Plot the ACF and PACF graphs of the differencied data.
+
+```{r}
+
+japan_d |> ACF(diff2, lag_max = 24) |> autoplot()
+japan_d |> PACF(diff2, lag_max = 24) |> autoplot()
+
+```
+
+5. Use the function ARIMA() to run an automatic selection procedure of the model. Does it give the same model that you chose? If not, which model do you think is better?
+
+```{r}
+
+fit <- japan |>
+  model(
+    guess1 = ARIMA(Arrivals ~ pdq(0,1,1) + PDQ(0,1,1)),
+    guess2 = ARIMA(Arrivals ~ pdq(1,1,0) + PDQ(0,1,1)),
+    auto   = ARIMA(Arrivals)
+  )
+
+
+fit |> select(auto) |> report()
+glance(fit) |> arrange(AICc) |> select(.model, AIC, AICc, BIC)
+
+```
+
+6. Inspect the residuals of both models to see if any auto-correlation pattern remains.
+ 
+```{r}
+
+fit |> select(guess1) |> gg_tsresiduals()
+fit |> select(auto)   |> gg_tsresiduals()
+
+#fit |> select(auto) |> report() # 3 coefficients so dof = 3 (for auto)
+
+augment(fit) |> filter(.model == "guess1") |> features(.innov, ljung_box, lag = 8, dof = 2)
+augment(fit) |> filter(.model == "auto")   |> features(.innov, ljung_box, lag = 8, dof = 3)   # dof = number of ARMA parameters
+
+
+```
+
+```{r}
+fit2 <- japan |>
+  model(
+    log_guess1 = ARIMA(log(Arrivals) ~ pdq(0,1,1) + PDQ(0,1,1)),
+    log_auto   = ARIMA(log(Arrivals))
+  )
+fit2 |> select(log_auto) |> gg_tsresiduals() 
+fit2 |> select(log_guess1) |> gg_tsresiduals() 
+
+fit2 |> select(log_auto) |> report() # 4 coefficients so dof = 4 not 3 (for auto)
+#fit2 |> select(log_guess1) |> report() # 2 coefficients so dof = 2 (for guess1)
+
+augment(fit2) |> filter(.model == "log_guess1") |> features(.innov, ljung_box, lag = 8, dof = 2)
+augment(fit2) |> filter(.model == "log_auto") |> features(.innov, ljung_box, lag = 8, dof = 4)
+```
+
+
+

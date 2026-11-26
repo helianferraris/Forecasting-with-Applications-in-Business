@@ -1,0 +1,140 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+**Exercise 3**
+
+Choose the Electricity time series from aus_production data set of package fpp3
+
+1. Display the time series. Do the data need transforming? If so, find a suitable transformation.
+
+```{r}
+
+#rm(list = ls())
+
+library(fpp3)
+
+elec <- aus_production |> select(Quarter, Electricity)
+
+elec |> autoplot(Electricity)
+elec |> gg_season(Electricity)
+
+# Candidate transformations
+lambda <- elec |> features(Electricity, features = guerrero) |> pull(lambda_guerrero)
+lambda
+
+elec |> autoplot(log(Electricity))
+elec |> autoplot(box_cox(Electricity, lambda)) 
+
+```
+
+2. Are the data stationary? If not, find an appropriate differencing which yields stationary data.
+
+```{r}
+#elec <- elec |> mutate(lelec = box_cox(Electricity, lambda))
+elec <- elec |> mutate(lelec = log(Electricity))
+
+# R's suggestion
+elec |> features(lelec, list(unitroot_nsdiffs, unitroot_ndiffs))
+
+# Seasonal difference, then KPSS
+elec <- elec |> mutate(d4 = difference(lelec, 4))
+
+elec |> features(d4, unitroot_ndiffs) # we run ndiffs on the seasonally differenced series --> we get ndiffs = 1 now --> agrees with KPSS
+
+
+# Add a first difference if KPSS still rejects, then test again
+elec <- elec |> mutate(d4d1 = difference(d4, 1))
+elec |> features(d4d1, unitroot_kpss)
+
+elec |> autoplot(d4d1)
+```
+
+3. Identify a couple of ARIMA models that might be useful in describing the time series. Which of your models is the best according to their AIC values?
+
+4. Compare to the result of ARIMA(). Compare the AICc and select one model.
+
+```{r}
+
+# ACF and PACF of the differenced log series
+elec |> ACF(d4d1, lag_max = 24) |> autoplot()
+elec |> PACF(d4d1, lag_max = 24) |> autoplot()
+
+fit <- elec |>
+  model(
+    m1   = ARIMA(log(Electricity) ~ pdq(0,1,1) + PDQ(0,1,1)),
+    m2   = ARIMA(log(Electricity) ~ pdq(0,1,1) + PDQ(0,1,2)),
+    m3   = ARIMA(log(Electricity) ~ pdq(1,1,1) + PDQ(0,1,1)),
+    auto = ARIMA(log(Electricity))
+  )
+
+# m3 = auto
+
+fit |> select(auto) |> report()
+glance(fit) |> arrange(AICc) |> select(.model, AIC, AICc, BIC)
+
+```
+
+5. Describe your best model and do diagnostic testing on the residuals. Do the residuals resemble white noise? If not, try to find another ARIMA model which fits better.
+
+```{r}
+# m3 has 3 coefficients (ar1, ma1, sma1), so dof = 3
+
+fit |> select(auto) |> gg_tsresiduals()
+
+augment(fit) |> filter(.model == "auto") |> features(.innov, ljung_box, lag = 8, dof = 3)
+
+```
+
+
+```{r}
+fit2 <- elec |>
+  model(
+    m3 = ARIMA(log(Electricity) ~ pdq(1,1,1) + PDQ(0,1,1)),
+    m4 = ARIMA(log(Electricity) ~ pdq(2,1,1) + PDQ(0,1,1)),
+    m5 = ARIMA(log(Electricity) ~ pdq(1,1,2) + PDQ(0,1,1)),
+    m6 = ARIMA(log(Electricity) ~ pdq(1,1,1) + PDQ(1,1,1)),
+    m7 = ARIMA(log(Electricity) ~ pdq(1,1,1) + PDQ(0,1,2)),
+    m8 = ARIMA(log(Electricity) ~ pdq(0,1,3) + PDQ(0,1,1))
+  )
+
+glance(fit2) |> arrange(AICc) |> select(.model, AIC, AICc, BIC)
+
+fit2 |> select(m4) |> report()
+fit2 |> select(m5) |> report()
+```
+```{r}
+augment(fit2) |> filter(.model == "m4") |> features(.innov, ljung_box, lag = 8, dof = 4)
+augment(fit2) |> filter(.model == "m5") |> features(.innov, ljung_box, lag = 8, dof = 4)
+
+
+```
+
+6. Forecast the next 24 months of data using your preferred model.
+
+```{r}
+
+# We will keep the model m3 --> ARIMA(1,1,1)(0,1,1)[4]
+
+fit |>
+  select(m3) |>
+  forecast(h = 8) |>
+  autoplot(elec |> filter(year(Quarter) >= 1990))
+
+fit |> select(m3) |> forecast(h = 8) |> hilo(level = 95)
+
+```
+
+```{r}
+
+# We can try with m4 --> ARIMA(2,1,1)(0,1,1)[4]
+
+fit2 |>
+  select(m4) |>
+  forecast(h = 8) |>
+  autoplot(elec |> filter(year(Quarter) >= 1990))
+
+fit2 |> select(m4) |> forecast(h = 8) |> hilo(level = 95)
+
+```

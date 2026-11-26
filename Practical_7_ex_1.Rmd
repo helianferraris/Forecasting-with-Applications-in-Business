@@ -1,0 +1,81 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+**Exercise 1**
+
+Write an R function simulate_arima() that generates a realization from an ARIMA(1,1,1) process with innovation variance σ2, and starting values Y0, ε0.
+
+```{r}
+#rm(list = ls())
+
+library(fable)
+library(tsibble)
+library(dplyr)
+library(ggplot2)
+
+
+set.seed(12)
+
+simulate_arima <- function(n, phi, theta, sigma2, Y0 = 0, eps0 = 0, X0 = 0) {
+  eps <- c(eps0, rnorm(n, mean = 0, sd = sqrt(sigma2)))
+  Y <- numeric(n + 1)
+  Y[1] <- Y0
+  for (t in 2:(n + 1)) {
+    Y[t] <- phi * Y[t - 1] + eps[t] + theta * eps[t - 1]
+  }
+  Y <- Y[-1]                 # drop the starting value
+  X <- X0 + cumsum(Y)        # integrate: X_t = X_{t-1} + Y_t
+  list(x = X, y = Y)
+}
+
+```
+
+Use your function to simulate a time series from an ARIMA(1,1,1) model with ϕ= 0.6, θ=−0.5 and σ2 = 2, and starting values Y0 = 1, ε0 = 0. Plot the simulated series.
+
+```{r}
+
+set.seed(12)
+
+sim1 <- simulate_arima(n = 200, phi = 0.6, theta = -0.5, sigma2 = 2, Y0 = 1, eps0 = 0)
+plot.ts(sim1$x, main = "Simulated ARIMA(1,1,1)", ylab = "X_t")
+```
+
+Compare your simulation with the output of the built-in arima.sim() function using the same parameters.
+
+```{r}
+
+set.seed(12)
+sim2 <- arima.sim(model = list(order = c(1, 1, 1), ar = 0.6, ma = -0.5),
+                  n = 200, sd = sqrt(2))   # sd, not variance
+par(mfrow = c(2, 1))
+plot.ts(sim1$x,  main = "Initial simulation")
+plot.ts(sim2,   main = "arima.sim()")
+
+```
+
+Plot the ACF and PACF of the simulated series.
+
+```{r}
+
+par(mfrow = c(1, 2))
+acf(sim1$x,  lag.max = 30, main = "ACF of X_t")
+pacf(sim1$x, lag.max = 30, main = "PACF of X_t")
+
+```
+
+Compare with the theoretical autocorrelation obtained with the function ARMAacf from package stats.
+
+```{r}
+
+theo <- ARMAacf(ar = 0.6, ma = -0.5, lag.max = 30)
+emp  <- acf(sim1$y, lag.max = 30, plot = FALSE)$acf[, 1, 1]
+
+plot(0:30, emp, type = "h", xlab = "Lag", ylab = "ACF")
+points(0:30, theo, col = "red", pch = 19)
+legend("topright", c("Empirical", "Theoretical"),
+       col = c("black", "red"), pch = c(NA, 19), lty = c(1, NA))
+
+```
+
